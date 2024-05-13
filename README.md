@@ -1,10 +1,10 @@
-# FlowProgramming
+# LLM as Interpreter for Natural Language Programming, Pseudo-code Programming and Flow Programming of AI Agents
 
 Since their inception, programming languages have trended towards greater readability and lower barriers for programmers. Following this trend, natural language can be a promising type of programming language that provides great flexibility and usability and helps towards the democracy of programming. However, the inherent vagueness, ambiguity, and verbosity of natural language pose significant challenges in developing an interpreter that can accurately understand the programming logic and execute instructions written in natural language. Fortunately, recent advancements in Large Language Models (LLMs) have demonstrated remarkable proficiency in interpreting complex natural language. Inspired by this, we develop a novel system for Code Representation and Execution (CoRE), which employs LLM as interpreter to interpret and execute natural language instructions. The proposed system unifies natural language programming, pseudo-code programming, and flow programming under the same representation for constructing language agents, while LLM serves as the interpreter to interpret and execute the agent programs. In this paper, we begin with defining the programming syntax that structures natural language instructions logically. During the execution, we incorporate external memory to minimize redundancy. Furthermore, we equip the designed interpreter with the capability to invoke external tools, compensating for the limitations of LLM in specialized domains or when accessing real-time information.
 
 This package is mainly contributed by [Shuyuan Xu](https://github.com/shuyuan-x) (shuyuan.xu@rutgers.edu), [Zelong Li](https://github.com/lzl65825) (zelong.li@rutgers.edu), and [Yongfeng Zhang](https://github.com/evison) (yongfeng.zhang@rutgers.edu). We welcome any issues and requests for model implementation and bug fix.
 
-## Citation
+## Reference
 
 To be updated
 
