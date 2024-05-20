@@ -106,7 +106,7 @@ def get_prompt(tool_info, flow_ptr, task_description, cur_progress, observations
         else:
             prompt = f'{tool_info}\n\n{other_info}\n\nCurrent Progress:\n{progress_str}\n\nTask description: {task_description}\n\n' \
                 f'Question: {flow_ptr.get_instruction()}\n\nOnly answer the current instruction and do not be verbose.'
-        return prompt
+    return prompt
 
 
 def check_branch(client, messages, flow_ptr, model_name, temperature=0.):
