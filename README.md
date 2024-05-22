@@ -37,7 +37,9 @@ pip install -r requirements.txt
 
 3. Download the OpenAGI data from this [Google Drive link](https://drive.google.com/drive/folders/1AjT6y7qLIMxcmHhUBG5IE1_5SnCPR57e?usp=share_link), put it into the *FlowProgramming/* folder, then unzip it.
 
-4. Make sure you are in the *FlowProgramming/src* folder before running the codes. Otherwise,
+4. Download the [database](https://drive.google.com/file/d/1pF1Sw6pBmq2sFkJvm-LzJOqrmfWoQgxE/view?usp=drive_link) and unzip it to the `CoRE` directory (i.e., `your/path/CoRE`) and rename it as `travel_database`.
+
+5. Make sure you are in the *FlowProgramming/src* folder before running the codes. Otherwise,
 
 ```
 cd src
@@ -50,7 +52,8 @@ OpenAGI on gpt-4-1106-preview:
 python main.py \
 --flow_name=OpenAGI_Flow.txt \
 --tool_name=tools.txt \
---log_file_name=OpenAGI_log.txt \
+--task=OpenAGI \
+--log_file_name=OpenAGI_gpt_log.txt \
 --model_name=gpt-4-1106-preview \
 --openai_key="YOUR OPENAI KEY"
 ```
@@ -60,7 +63,32 @@ OpenAGI on TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ:
 python main.py \
 --flow_name=OpenAGI_Flow.txt \
 --tool_name=tools.txt \
---log_file_name=OpenAGI_log.txt \
+--task=OpenAGI \
+--log_file_name=OpenAGI_mixtral_log.txt \
+--model_name=TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ \
+--openai_key="YOUR OPENAI KEY"
+```
+
+TravelPlanner on gpt-4-1106-preview:
+```commandline
+python main.py \
+--flow_name=TravelPlanner_Flow.txt \
+--tool_name=tools.txt \
+--task=TravelPlanner \
+--log_file_name=TravelPlanner_gpt_log.txt \
+--results_name=gpt \
+--model_name=gpt-4-1106-preview \
+--openai_key="YOUR OPENAI KEY"
+```
+
+TravelPlanner on TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ:
+```commandline
+python main.py \
+--flow_name=TravelPlanner_Flow.txt \
+--tool_name=tools.txt \
+--task=TravelPlanner \
+--log_file_name=TravelPlanner_mixtral_log.txt \
+--results_name=mixtral \
 --model_name=TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ \
 --openai_key="YOUR OPENAI KEY"
 ```

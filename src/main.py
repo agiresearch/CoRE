@@ -37,11 +37,6 @@ from torch.utils.data import DataLoader
 
 from transformers import AutoModel, AutoFeatureExtractor
 
-
-
-# from evaluation import OpenAGI_evaluate
-
-
 def global_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--openai_key", type=str, default='')
@@ -58,6 +53,7 @@ def global_args():
     parser.add_argument("--other_info_name", type=str, default='other_info.txt')
     parser.add_argument("--log_dir", type=str, default='../log/')
     parser.add_argument("--set_type", type=str, default='validation')
+    parser.add_argument("--avoid_dup_tool_call", action='store_true')
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--get_observation", type=str, default='traverse', help='How to get observations, "traverse" stands for asking one by one, "direct" stands for directly asking.')
     parser.add_argument("--batch_size", type=int, default=5)
@@ -67,14 +63,11 @@ def global_args():
     args = parser.parse_known_args()[0]
     return args
 
-def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, tool_list, notebook, args):
-    if 'gpt' in args.model_name:
-        openai_key = args.openai_key
-        client = OpenAI(api_key=openai_key)
-    elif 'gptq' in args.model_name.lower():
-        client = LLM(model=args.model_name, download_dir=args.cache_dir, quantization='gptq', enforce_eager=True, dtype=torch.float16, tensor_parallel_size=8)#, gpu_memory_utilization=0.7)
-
+def finish_one_task(client, instruction, tool_info, other_info, flow, task_idx, query, tool_list, notebook, args):
+    
     notebook.reset()
+    if args.task == "TravelPlanner":
+        result_file = get_result_file(args)
 
     plan_round = 1
     flow_ptr = flow.header
@@ -89,6 +82,12 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
     return_res = dict()
     while True:
         if plan_round >= args.max_round:
+            if args.task == "TravelPlanner":
+                current_interaction = '\n'.join(current_progress) + '\n' + '\n'.join(notebook.list_all_str())
+                result, price = convert_to_json_with_gpt(current_interaction, args.openai_key)
+                total_price += price
+                submit_result = {"idx":task_idx,"query":query,"plan":result}
+                write_result_into_file(submit_result, result_file)
             break
         chat_history = []
         if isinstance(instruction, str):
@@ -103,7 +102,7 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
 
         # generate prompt
         prompt = get_prompt(tool_info, flow_ptr, query, current_progress, observations, args.model_name, other_info)
-        logging.info(f'Prompt: \n```\n{prompt}\n```')
+        logging.info(f'Input Prompt: \n```\n{prompt}\n```')
         chat_history.append({
             'role': 'user',
             'content': prompt
@@ -123,18 +122,22 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
         # current_progress.append(f'Answer {plan_round}: ```{res}```')
 
         # check tool use
-        if len(tool_list) > 0:
+        try:
+            tool_use, price = check_tool_use(client, '\n'.join(tool_calling_list), flow_ptr, str(res), tool_info, model_name=args.model_name)
+            total_price += price
+        except Exception as e:
+            logging.error(f"Error when checking tool use: {e}")
+            tool_use = False
+        
+        if tool_use:
             try:
-                tool_use, price = check_tool_use(client, '\n'.join(tool_calling_list), flow_ptr, str(res), tool_info, model_name=args.model_name)
-                total_price += price
-            except Exception as e:
-                logging.error(f"Error when checking tool use: {e}")
-                tool_use = False
-            
-            if tool_use:
                 tool_name, price= check_tool_name(client, flow_ptr, str(res), list(tool_list.keys()), model_name=args.model_name)
                 total_price += price
                 tool = tool_list[tool_name]
+            except Exception as e:
+                logging.error(f"Error when getting tool name: {e}")
+                tool_use = False
+            else:
                 for k in range(args.max_fail_times):
                     try:
                         param, price = get_tool_arg(client, flow_ptr, str(res), tool_info, tool_name, model_name=args.model_name)
@@ -145,9 +148,10 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
                             param_sep = [p.strip() for p in param.strip().split(',')]
                             tool_result = tool.run(*param_sep)
                         tool_calling = f'{tool_name} [ {param} ]'
-                        if tool_calling in tool_calling_list:
-                            current_progress.append(f'Answer {plan_round}: ```{res}```')
-                            break
+                        if args.avoid_dup_tool_call:
+                            if tool_calling in tool_calling_list:
+                                current_progress.append(f'Answer {plan_round}: ```{res}```')
+                                break
                         tool_calling_list.append(tool_calling)
                         short_summary, price = notebook_summarize(client, tool_info, tool_calling, args.model_name)
                         total_price += price
@@ -160,17 +164,21 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
                         if k + 1 == args.max_fail_times:  # Max Fail attempts
                             logging.error('Reach Max fail attempts on Get Tool Parameters.')
                             # if reach max fail attempts, do not use tool in this step.
-                            current_progress.append(f'Answer {plan_round}: ```{res}```')
+                            # current_progress.append(f'Answer {plan_round}: ```{res}```')
+                            tool_use = False
                             break
-                            # exit(1)
                         else:
                             continue
-            else:
-                current_progress.append(f'Answer {plan_round}: ```{res}```')
-                # output_record.append(None)
+        if not tool_use:
+            current_progress.append(f'Answer {plan_round}: ```{res}```')
 
         # terminate condition
         if len(flow_ptr.branch) == 0 and flow_ptr.type.lower() == 'terminal':
+            if args.task == 'TravelPlanner':
+                result, price = convert_to_json_with_gpt(str(res), args.openai_key)
+                total_price += price
+                submit_result = {"idx":task_idx,"query":query,"plan":result}
+                write_result_into_file(submit_result, result_file)
             if args.task == 'OpenAGI':
                 eval_device = "cuda:0"
                 clip_score = CLIPScore(model_name_or_path="openai/clip-vit-base-patch16")
@@ -182,7 +190,7 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
                 f = transforms.ToPILImage()
                 bertscore = load("bertscore")
 
-                data_path = "./openagi_data/"
+                data_path = "../openagi_data/"
                 dataset = GeneralDataset(task_idx, data_path)
                 dataloader = DataLoader(dataset, batch_size=args.batch_size)
                 seq_com = SeqCombine(args)
@@ -221,35 +229,60 @@ def finish_one_task(instruction, tool_info, other_info, flow, task_idx, query, t
         if len(flow_ptr.branch) == 1:  # no branches
             flow_ptr = list(flow_ptr.branch.values())[0]
         else:
-            branch, price = check_branch(client, res, flow_ptr, model_name=args.model_name)
-            total_price += price
+            try:
+                branch, price = check_branch(client, res, flow_ptr, model_name=args.model_name)
+                total_price += price
+            except Exception as e:
+                logging.error(f"Error when checking branch: {e}")
+                branch = list(flow_ptr.branch.keys())[0]
             flow_ptr = flow_ptr.branch[branch]
         logging.info(f'Current Block: \n```\n{flow_ptr}```')
 
         plan_round += 1
-        
+
     logging.info(f'The price for task {task_idx} is {total_price}')
     return total_price, return_res
 
 def load_query(args):
     if args.task == 'OpenAGI':
         task_description = ReadLineFromFile("../openagi_data/task_description.txt")
-        idx_list = [2,3,10,15,20,35,45,55,65,70,90,106,107]
-        return [(i, task_description[i+1]) for i in idx_list]
+        return [(i, task_description[i+1]) for i in range(len(task_description))]
+    
+    elif args.task == 'TravelPlanner':
+        if args.set_type == 'validation':
+            query_data_list  = load_dataset('osunlp/TravelPlanner','validation', download_mode='force_redownload', cache_dir=args.cache_dir)['validation']
+        elif args.set_type == 'test':
+            query_data_list  = load_dataset('osunlp/TravelPlanner','test', download_mode='force_redownload', cache_dir=args.cache_dir)['test']
+        else:
+            raise NotImplementedError
+        return [(i+1, query_data_list[i]['query']) for i in range(1, len(query_data_list))]
+
     else:
         raise NotImplementedError
     
 def load_tool(args):
     if args.task == 'OpenAGI':
         return "", {}
-    else:
-        return "", {}
+    elif args.task == 'TravelPlanner':
+        tool_info_list = ReadLineFromFile(args.tool_file)
+        tool_name_list = [tool_description.split()[0] for tool_description in tool_info_list[1:]]
+        tool_info = '\n'.join(tool_info_list)
+
+        # create tool_list, tool name as the key and tool as value
+        tool_list = dict()
+        for tool_name in tool_name_list:
+            try:
+                tool_list[tool_name] = globals()[tool_name]()
+            except:
+                raise Exception(f"{tool_name} is not found")
+        return tool_info, tool_list
+    
 def load_other_info(args):
     if args.task == 'OpenAGI':
         other_info_list = ReadLineFromFile(args.tool_file)
         other_info = '\n'.join(other_info_list)
         return other_info
-    else:
+    elif args.task == 'TravelPlanner':
         return ""
 
 def main():
@@ -280,7 +313,7 @@ def main():
         tool_info, tool_list = load_tool(args)
     else:
         tool_info, tool_list = "", dict()
-    logging.info(f'```\ntool_info:\n{tool_info}```\n')
+    logging.info(f'```\ntool_info:\n{tool_info}\n```\n')
 
     # load other_info
     args.other_file = os.path.join(args.info_dir, args.task, args.other_info_name)
@@ -288,12 +321,19 @@ def main():
         other_info = load_other_info(args)
     else:
         other_info = ""
-    logging.info(f'```\nother_info:\n{tool_info}```\n')
+    logging.info(f'```\nother_info:\n{other_info}\n```\n')
 
     # Create a notebook to save observations
     notebook = Notebook()
 
     total_price = 0.0
+
+    if 'gpt' in args.model_name:
+        openai_key = args.openai_key
+        client = OpenAI(api_key=openai_key)
+    elif 'gptq' in args.model_name.lower():
+        client = LLM(model=args.model_name, download_dir=args.cache_dir, quantization='gptq', enforce_eager=True, dtype=torch.float16, tensor_parallel_size=8)#, gpu_memory_utilization=0.7)
+
 
     if args.task == 'OpenAGI':
         rewards = []
@@ -305,10 +345,14 @@ def main():
     # Answer every query
     for idx, query in task_query:
         try:
-            price, return_res = finish_one_task(instruction, tool_info, other_info, flow, idx, query, tool_list, notebook, args)
+            price, return_res = finish_one_task(client, instruction, tool_info, other_info, flow, idx, query, tool_list, notebook, args)
             total_price += price
         except Exception as e:
             logging.error(f"Error when answering {query}: {e}")
+            if args.task == 'TravelPlanner':
+                result_file = get_result_file(args)
+                submit_result = {"idx":idx,"query":query,"plan":None}
+                write_result_into_file(submit_result, result_file)
         if args.task == 'OpenAGI':
             ave_task_reward = return_res['reward']
             if 0 <= idx <= 14:

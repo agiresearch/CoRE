@@ -53,10 +53,10 @@ def get_observation_traverse(client, query, current_progress, notebook, flow_ptr
                  f'Is it helpful to retrieve previous execution results of {observation["Short Description"]} to make informed response of the current question?\n\n' \
                  f'Answer "Yes" or "No" and explain why.'
         if 'gpt' not in model_name:
-            prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
-        logging.info(f'Observation Check Prompt: \n```\n{prompt}\n```')
+            prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer:\n [/INST]'
+        # logging.info(f'Observation Check Prompt: \n```\n{prompt}\n```')
         response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, 0., [",", ".", "\\n"])
-        logging.info(f'Observation Check Response: \n```\n{response}\n```')
+        # logging.info(f'Observation Check Response: \n```\n{response}\n```')
         total_price += price
         if 'yes' in response.lower():
             logging.info(f'Relevant Observation: {observation["key"]} {observation["Short Description"]}')
@@ -79,7 +79,7 @@ def get_observation_direct(client, query, current_progress, notebook, flow_ptr, 
     prompt += 'Your answer should be numbers separated by commas, referring to the desired choice, with no additional text or explanations. Do not be verbose.'
     # logging.info(f'Prompt: \n```\n{prompt}\n```')
     if 'gpt' not in model_name:
-        prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
+        prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer:\n [/INST]'
     response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, 0., ['.'])
     logging.info(f'Relevant Observation: \n```\n{response}\n```')
     idx_list = [idx.strip() for idx in response.strip().split(',')]
@@ -95,10 +95,10 @@ def get_prompt(tool_info, flow_ptr, task_description, cur_progress, observations
     if 'gpt' not in model_name:
         if len(observations) > 0:
             prompt = f'[INST] ### {tool_info}\n\n{other_info}\n\nCurrent Progress:\n{progress_str}\n\nTask description: {task_description}\n\nObservations:\n{observations}\n\n' \
-                f'Question: {flow_ptr.get_instruction()}\n\nOnly answer the current instruction and do not be verbose. \n\n### Answer:\n [\INST]'
+                f'Question: {flow_ptr.get_instruction()}\n\nOnly answer the current question and do not be verbose. \n\n### Answer:\n [/INST]'
         else:
             prompt = f'[INST] ### {tool_info}\n\n{other_info}\n\nCurrent Progress:\n{progress_str}\n\nTask description: {task_description}\n\n' \
-                f'Question: {flow_ptr.get_instruction()}\n\nOnly answer the current instruction and do not be verbose. \n\n### Answer:\n [\INST]'
+                f'Question: {flow_ptr.get_instruction()}\n\nOnly answer the current question and do not be verbose. \n\n### Answer:\n [/INST]'
     else:
         if len(observations) > 0:
             prompt = f'{tool_info}\n\n{other_info}\n\nCurrent Progress:\n{progress_str}\n\nTask description: {task_description}\n\nObservations:\n{observations}\n\n' \
@@ -116,7 +116,7 @@ def check_branch(client, messages, flow_ptr, model_name, temperature=0.):
         prompt += f'{i + 1}: {key}.\n'
     prompt += "Your answer should be only an number, referring to the desired choice. Don't be verbose!"
     if 'gpt' not in model_name:
-        prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
+        prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer:\n [/INST]'
     # logging.info(f'Prompt: \n```\n{prompt}\n```')
     total_price = 0.0
     while True:
@@ -129,7 +129,7 @@ def check_branch(client, messages, flow_ptr, model_name, temperature=0.):
         print(f'Temperature: {temperature}')
         if temperature > 2:
             print('No valid format output when calling "Check Branch".')
-            exit(1)
+            raise Exception('No valid format output when calling "Check Branch".')
     logging.info(f'{response}, {possible_keys[response - 1]}')
     return possible_keys[response - 1], total_price
 
@@ -138,7 +138,7 @@ def notebook_summarize(client, tool_info, tool_calling, model_name, temperature=
              f"For the information of ```{tool_calling}```, describe the provided information in a concise format without mentioning the tool's name." \
              f"The arguments should be exacttly included in the description. "
     if 'gpt' not in model_name:
-        prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
+        prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer:\n [/INST]'
     response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, temperature, ['.'])
     logging.info(f'Short Summary for {tool_calling}: {response}')
     return response, price
@@ -148,16 +148,21 @@ def check_tool_use(client, observation, flow_ptr, messages, tool_info, model_nam
     prompt = f'You are allowed to use the following tools: \n\n```{tool_info}```\n\n' \
              f'Initial Response: ```{messages}```\n' \
              f'Current Question: ```{flow_ptr.get_instruction()}```\n\n' \
-             f'Is there a need to execute additional provided tools to fully address the current question? \n\n' \
+             f'Is there a need to execute a tool to fully address the current question? \n\n' \
              f'Answer "Yes" or "No" and explain why. '
-    logging.info(f'Tool Use Prompt: \n```\n{prompt}\n```')
+    # logging.info(f'Tool Use Prompt: \n```\n{prompt}\n```')
     # f'Existing Tool Usage: ```{observation}```\n\n' \
     #          f'You may execute tools with the same name if the arguments are different, but do not execute any tool with the same name and the same arguments that have been used previously.\n' \
     if 'gpt' not in model_name:
-        prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
+        prompt = f'You are allowed to use the following tools: \n\n```{tool_info}```\n\n' \
+                f'Initial Response: ```{messages}```\n' \
+                f'Does the initial response mention a provided tool? \n\n' \
+                f'Answer "Yes" or "No" and explain why. '
+        # logging.info(f'Tool Use Prompt: \n```\n{prompt}\n```')
+        prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer: \n [/INST]'
     total_price = 0.0
     while True:
-        response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, temperature, [",", ".", "\\n"])
+        response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, temperature, [",", ".", "\\n"]) # , [",", ".", "\\n"]
         total_price += price
         temperature += .5
         logging.info(f'Tool use check: {response}')
@@ -169,7 +174,7 @@ def check_tool_use(client, observation, flow_ptr, messages, tool_info, model_nam
         if temperature > 2:
             break
     logging.info('No valid format output when calling "Tool use check".')
-    exit(1)
+    return False, total_price
 
 
 def get_tool_arg(client, flow_ptr, messages, tool_info, selected_tool, model_name):
@@ -181,7 +186,7 @@ def get_tool_arg(client, flow_ptr, messages, tool_info, selected_tool, model_nam
     # logging.info(f'Prompt: \n```\n{prompt}\n```')
     # f'What is the input argument to call tool for this step: ```{messages}```? ' \
     if 'gpt' not in model_name:
-        prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
+        prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer:\n [/INST]'
     response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, 0.)
     logging.info(f'Parameters: {response}')
     return response, price
@@ -193,7 +198,7 @@ def check_tool_name(client, flow_ptr, messages, tool_list, model_name, temperatu
     prompt += "Your answer should be only an number, referring to the desired choice. Don't be verbose!"
     # logging.info(f'Prompt: \n```\n{prompt}\n```')
     if 'gpt' not in model_name:
-        prompt = f'### Question:\n{prompt}\n\n### Answer:\n'
+        prompt = f'[INST] ### Question:\n{prompt}\n\n### Answer:\n [/INST]'
     total_price = 0.0
     while True:
         response, price = get_response_from_client(client, [{'role': 'user', 'content': prompt}], model_name, temperature, ['.'])
@@ -205,7 +210,7 @@ def check_tool_name(client, flow_ptr, messages, tool_list, model_name, temperatu
         print(f'Temperature: {temperature}')
         if temperature > 2:
             logging.info('No valid format output when calling "Tool name select".')
-            exit(1)
+            raise Exception('No valid format output when calling "Tool name select".')
     logging.info(f'{response}, {tool_list[response - 1]}')
     return tool_list[response - 1], total_price
 
