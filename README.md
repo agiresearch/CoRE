@@ -8,14 +8,6 @@ This package is mainly contributed by [Shuyuan Xu](https://github.com/shuyuan-x)
 
 To be updated
 
-## Requirements
-
-- Python==3.9
-- PyTorch==2.2.0
-- transformers==4.40.2
-- langchain==0.1.4
-- peft==0.7.1
-
 ## Preparation
 
 0. Clone this repo.
