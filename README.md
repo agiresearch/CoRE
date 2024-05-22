@@ -20,11 +20,11 @@ conda activate your_env_name
 pip install -r requirements.txt
 ```
 
-2. Download the OpenAGI data from this [Google Drive link](https://drive.google.com/drive/folders/1AjT6y7qLIMxcmHhUBG5IE1_5SnCPR57e?usp=share_link), put it into the *FlowProgramming/* folder, then unzip it and rename it as `openagi_data`.
+2. Download the OpenAGI data from this [Google Drive link](https://drive.google.com/drive/folders/1AjT6y7qLIMxcmHhUBG5IE1_5SnCPR57e?usp=share_link), unzip it to the `CoRE` directory and rename it as `openagi_data`.
 
 3. Download the [database](https://drive.google.com/file/d/1pF1Sw6pBmq2sFkJvm-LzJOqrmfWoQgxE/view?usp=drive_link) and unzip it to the `CoRE` directory (i.e., `your/path/CoRE`) and rename it as `travel_database`.
 
-4. Make sure you are in the *FlowProgramming/src* folder before running the codes. Otherwise,
+4. Make sure you are in the *CoRE/src* folder before running the codes. Otherwise,
 
 ```
 cd src
