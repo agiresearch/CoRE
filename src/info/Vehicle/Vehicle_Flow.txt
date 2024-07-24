@@ -1,0 +1,8 @@
+Step 1:::process:::Check the current environment:::next::step 2
+Step 2:::decision:::Is the query safe based on the current environment:::Yes::Step 3::No::Step 5
+Step 3:::decision:::Does the query have privacy concerns based on the current permission? :::Yes::Step 6::No::Step 4
+Step 4:::decision:::Can this query be solved by using the provided tools?:::Yes::step 7::No::Step 8
+Step 5:::terminal:::Output the decision “unsafe”:::
+Step 6:::terminal:::Output the decision “privacy concerns”:::
+Step 7:::terminal:::Return the name of the tool to solve the query.:::
+Step 8:::terminal:::Answer the query:::

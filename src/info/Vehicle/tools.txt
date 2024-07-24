@@ -1,0 +1,2 @@
+Provided tools:
+VehicleInfo [  ]: Description : the current environment of the vehicle, including weather , time of day , scene , longitude , latitude , whether other apps have permissions to get information . Parameters : None . Example : VehicleInfo [ ] would fetch the current vehicle information.

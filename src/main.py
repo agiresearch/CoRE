@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import json
 
 import numpy as np
 from datasets import load_dataset
@@ -14,6 +15,7 @@ from utils.notebook import Notebook
 from utils.travel_utils import convert_to_json_with_gpt, get_result_file, write_result_into_file
 from utils.flow_utils import ReadLineFromFile, get_prompt, get_observation, notebook_summarize, get_response_from_client, check_tool_use, check_tool_name, \
     get_tool_arg, check_branch, set_logger
+from utils.vehicle_utils import get_vehicle_result_file
 from flow.flow import Flow
 from openai import OpenAI
 
@@ -31,11 +33,18 @@ from travel_api.googleDistanceMatrix.apis import GoogleDistanceMatrix
 from travel_api.attractions.apis import AttractionSearch
 from travel_api.cities.apis import CitySearch
 
+from vehicle_api.apis import VehicleInfo
+
 from vllm import LLM, SamplingParams
 import torch
 from torch.utils.data import DataLoader
 
 from transformers import AutoModel, AutoFeatureExtractor
+
+
+
+# from evaluation import OpenAGI_evaluate
+
 
 def global_args():
     parser = argparse.ArgumentParser()
@@ -65,10 +74,15 @@ def global_args():
 
 def finish_one_task(client, instruction, tool_info, other_info, flow, task_idx, query, tool_list, notebook, args):
     
+    
     notebook.reset()
     if args.task == "TravelPlanner":
         result_file = get_result_file(args)
-
+    if args.task == "Vehicle":
+        result_file = get_vehicle_result_file(args)
+        tool_list['VehicleInfo'].load_task_idx(task_idx)
+    print("here")
+    
     plan_round = 1
     flow_ptr = flow.header
     logging.info(f'```\ntask id:\n{task_idx}```\n')
@@ -143,7 +157,9 @@ def finish_one_task(client, instruction, tool_info, other_info, flow, task_idx, 
                         param, price = get_tool_arg(client, flow_ptr, str(res), tool_info, tool_name, model_name=args.model_name)
                         total_price += price
                         if param == 'None':
+                            print("should be None")
                             tool_result = tool.run()
+                            print("run here")
                         else:
                             param_sep = [p.strip() for p in param.strip().split(',')]
                             tool_result = tool.run(*param_sep)
@@ -167,16 +183,27 @@ def finish_one_task(client, instruction, tool_info, other_info, flow, task_idx, 
                             # current_progress.append(f'Answer {plan_round}: ```{res}```')
                             tool_use = False
                             break
+                            # exit(1)
                         else:
                             continue
         if not tool_use:
             current_progress.append(f'Answer {plan_round}: ```{res}```')
+            # output_record.append(None)
 
         # terminate condition
         if len(flow_ptr.branch) == 0 and flow_ptr.type.lower() == 'terminal':
+            # if args.task == 'OpenAGI':
+            #     OpenAGI_evaluate(client, args, )
             if args.task == 'TravelPlanner':
                 result, price = convert_to_json_with_gpt(str(res), args.openai_key)
                 total_price += price
+                # try:
+                #     result, price = convert_to_json_with_gpt('\n'.join(notebook.list_all_str()) + '\n' + str(res), args.openai_key)
+                #     total_price += price
+                # except Exception as e:
+                #     logging.error(f"Error when parsing the generated plan to json: {e}")
+                #     result, price = convert_to_json_with_gpt(str(res), args.openai_key)
+                #     total_price += price
                 submit_result = {"idx":task_idx,"query":query,"plan":result}
                 write_result_into_file(submit_result, result_file)
             if args.task == 'OpenAGI':
@@ -223,6 +250,9 @@ def finish_one_task(client, instruction, tool_info, other_info, flow, task_idx, 
                 seq_com.close_module_seq()
                 print(f'Score: {ave_task_reward}')
                 return_res['reward'] = ave_task_reward
+            if args.task == 'Vehicle':
+                submit_result = {"idx":task_idx,"query":query,"answer":res}
+                write_result_into_file(submit_result, result_file)
             break
 
         # check branch
@@ -255,7 +285,14 @@ def load_query(args):
             query_data_list  = load_dataset('osunlp/TravelPlanner','test', download_mode='force_redownload', cache_dir=args.cache_dir)['test']
         else:
             raise NotImplementedError
-        return [(i+1, query_data_list[i]['query']) for i in range(1, len(query_data_list))]
+        return [(i+1, query_data_list[i]['query']) for i in range(len(query_data_list))]
+    elif args.task == 'Vehicle':
+        query_data_list = []
+        with open("../vehicle_data/test.jsonl", "r") as f: 
+            for line in f.read().strip().split('\n'):
+                unit = json.loads(line)
+                query_data_list.append(unit)
+        return [(row['idx'], row['query']) for row in query_data_list]
 
     else:
         raise NotImplementedError
@@ -263,7 +300,7 @@ def load_query(args):
 def load_tool(args):
     if args.task == 'OpenAGI':
         return "", {}
-    elif args.task == 'TravelPlanner':
+    elif args.task == 'TravelPlanner' or args.task == "Vehicle":
         tool_info_list = ReadLineFromFile(args.tool_file)
         tool_name_list = [tool_description.split()[0] for tool_description in tool_info_list[1:]]
         tool_info = '\n'.join(tool_info_list)
@@ -277,12 +314,13 @@ def load_tool(args):
                 raise Exception(f"{tool_name} is not found")
         return tool_info, tool_list
     
+    
 def load_other_info(args):
     if args.task == 'OpenAGI':
         other_info_list = ReadLineFromFile(args.tool_file)
         other_info = '\n'.join(other_info_list)
         return other_info
-    elif args.task == 'TravelPlanner':
+    elif args.task == 'TravelPlanner' or args.task == "Vehicle":
         return ""
 
 def main():
